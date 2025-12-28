@@ -154,6 +154,17 @@ async def health():
     }
 
 
+# Serve frontend
+@app.get("/", response_class=HTMLResponse)
+async def root():
+    """Serve the frontend HTML."""
+    frontend_path = Path(__file__).parent.parent / "frontend" / "index.html"
+    if not frontend_path.exists():
+        raise HTTPException(status_code=404, detail="Frontend not found")
+    with open(frontend_path, "r") as f:
+        return f.read()
+
+
 if __name__ == "__main__":
     import uvicorn
     host = os.getenv("HOST", "0.0.0.0")
