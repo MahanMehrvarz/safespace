@@ -104,6 +104,17 @@ The impression is private - the researcher won't see it."""
         # Build context with memory isolation
         context_parts = []
 
+        # Add previous impression for concern tracking
+        if self.current_impression and round_number > 1:
+            context_parts.append("YOUR PREVIOUS IMPRESSION:")
+            context_parts.append(f"Stance: {self.current_impression.stance.value}")
+            context_parts.append(f"Confidence: {self.current_impression.confidence.value}")
+            if self.current_impression.concerns:
+                context_parts.append(f"Previous Concerns:")
+                for concern in self.current_impression.concerns:
+                    context_parts.append(f"  - {concern}")
+            context_parts.append("")
+
         # Add conversation history (researcher's previous statements + your responses)
         if conversation_history and round_number > 1:
             context_parts.append("PREVIOUS CONVERSATION:")
@@ -130,6 +141,26 @@ The impression is private - the researcher won't see it."""
         # Build full prompt
         personality_prompt = self._build_personality_prompt()
         impression_prompt = self._build_impression_extraction_prompt()
+
+        concern_resolution_instructions = ""
+        if round_number > 1 and self.current_impression and self.current_impression.concerns:
+            concern_resolution_instructions = f"""
+CRITICAL: CONCERN RESOLUTION TRACKING
+You had {len(self.current_impression.concerns)} concern(s) in the previous round.
+
+For EACH previous concern, evaluate:
+1. Has the researcher's new input DIRECTLY addressed this concern?
+2. If YES → DO NOT include it in your new concerns list (it's resolved!)
+3. If NO → Include it again, BUT make it more specific based on what they said
+4. New concerns can emerge based on their latest input
+
+IMPORTANT: Only list UNRESOLVED or NEW concerns in your impression. Resolved concerns should disappear.
+
+If a concern is addressed:
+- Your confidence should INCREASE
+- Your stance may shift more positive
+- Acknowledge the progress in your response (briefly)
+"""
 
         full_prompt = f"""{personality_prompt}
 
@@ -163,6 +194,8 @@ CRITICAL INSTRUCTIONS FOR THIS ROUND:
    - Use YOUR typical language patterns
    - Focus on YOUR areas of concern
    - NEVER use your forbidden phrases
+
+{concern_resolution_instructions}
 
 Now respond to the researcher's LATEST statement. Make it clear you're building on an ongoing conversation, not starting fresh.
 

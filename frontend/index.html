@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PractAI - Supervision Meeting Simulator</title>
+    <title>SafeSpace - AI-Mediated Visibility Practice Environment</title>
     <style>
         * {
             margin: 0;
@@ -203,6 +203,11 @@
             animation: spin 1s ease-in-out infinite;
         }
 
+        #processing-hint .loading {
+            border: 3px solid rgba(255, 193, 7, 0.3);
+            border-top-color: #f39c12;
+        }
+
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
@@ -367,42 +372,51 @@
 <body>
     <div class="container">
         <header>
-            <h1>PractAI</h1>
-            <p>AI-Mediated Supervision Meeting Simulator</p>
+            <h1>SafeSpace</h1>
+            <p>A Practice Environment for AI-Mediated Visibility</p>
+            <p style="font-size: 12px; margin-top: 8px; opacity: 0.9;">This is not a real evaluation. This is a safe space to experience what it might feel like when AI systems mediate how your work is seen.</p>
         </header>
 
         <div id="error" class="error hidden"></div>
 
         <div id="session-info" class="session-info hidden">
-            <h3>Session Information</h3>
-            <div><strong>Session ID:</strong> <span id="session-id"></span></div>
-            <div><strong>Current Round:</strong> <span id="current-round">0</span></div>
-            <h4 style="margin-top: 15px;">Supervisors:</h4>
-            <div id="supervisors-list" class="supervisors"></div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div><strong>Round:</strong> <span id="current-round">0</span></div>
+                <div style="font-size: 12px; opacity: 0.7;">Session: <span id="session-id"></span></div>
+            </div>
+        </div>
+
+        <div id="processing-hint" class="session-info hidden" style="background: #fff3cd; border-left: 4px solid #ffc107;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span class="loading"></span>
+                <span id="hint-text">Agents are deliberating...</span>
+            </div>
         </div>
 
         <div id="impression-dashboard" class="impression-dashboard hidden">
-            <h3>📊 Live Supervisor Impressions</h3>
+            <h3>Current Impressions</h3>
+            <p style="font-size: 13px; color: #666; margin-top: -10px; margin-bottom: 15px;">How Himanshu, Ben, and Dave currently see your work</p>
             <div id="impressions-container"></div>
-        </div>
-
-        <div id="conversation" class="conversation hidden">
-            <h3 style="margin-bottom: 15px;">Conversation</h3>
-            <div id="messages"></div>
         </div>
 
         <div class="input-section">
             <div id="start-section">
-                <h3 style="margin-bottom: 15px;">Start New Session</h3>
-                <button id="start-btn" class="btn-success">Start Supervision Meeting</button>
+                <h3 style="margin-bottom: 10px;">Enter the Practice Space</h3>
+                <p style="font-size: 14px; color: #666; margin-bottom: 15px;">
+                    Present your work to an AI panel. They will form impressions of you and your work.
+                    Your goal is to understand how they see you and try to shift their impressions.
+                </p>
+                <button id="start-btn" class="btn-success">Begin Session</button>
             </div>
 
             <div id="input-section" class="hidden">
-                <h3 style="margin-bottom: 15px;">Your Response</h3>
-                <textarea id="researcher-input" placeholder="Present your research idea or respond to supervisor feedback..."></textarea>
+                <h3 style="margin-bottom: 10px;">Present to the Panel</h3>
+                <p style="font-size: 13px; color: #666; margin-bottom: 10px;">
+                    Share your work, respond to concerns, or clarify your approach. The panel will update their impressions after each submission.
+                </p>
+                <textarea id="researcher-input" placeholder="Present your research, respond to concerns, or clarify your approach..."></textarea>
                 <div class="button-group">
-                    <button id="submit-btn" class="btn-primary">Submit</button>
-                    <button id="reflect-btn" class="btn-warning">Submit + Request Reflection</button>
+                    <button id="submit-btn" class="btn-primary">Submit to Panel</button>
                     <button id="export-btn" class="btn-secondary">Export Session</button>
                     <button id="end-btn" class="btn-secondary">End Session</button>
                 </div>
@@ -420,24 +434,21 @@
         const sessionInfo = document.getElementById('session-info');
         const sessionIdSpan = document.getElementById('session-id');
         const currentRoundSpan = document.getElementById('current-round');
-        const supervisorsList = document.getElementById('supervisors-list');
+        const processingHint = document.getElementById('processing-hint');
+        const hintText = document.getElementById('hint-text');
         const impressionDashboard = document.getElementById('impression-dashboard');
         const impressionsContainer = document.getElementById('impressions-container');
-        const conversation = document.getElementById('conversation');
-        const messagesDiv = document.getElementById('messages');
         const startSection = document.getElementById('start-section');
         const inputSection = document.getElementById('input-section');
         const researcherInput = document.getElementById('researcher-input');
         const startBtn = document.getElementById('start-btn');
         const submitBtn = document.getElementById('submit-btn');
-        const reflectBtn = document.getElementById('reflect-btn');
         const exportBtn = document.getElementById('export-btn');
         const endBtn = document.getElementById('end-btn');
 
         // Event listeners
         startBtn.addEventListener('click', startSession);
-        submitBtn.addEventListener('click', () => submitInput(false));
-        reflectBtn.addEventListener('click', () => submitInput(true));
+        submitBtn.addEventListener('click', submitInput);
         exportBtn.addEventListener('click', exportSession);
         endBtn.addEventListener('click', endSession);
 
@@ -505,28 +516,44 @@
                 const data = await response.json();
 
                 sessionIdSpan.textContent = data.session_id;
-                supervisorsList.innerHTML = data.supervisors.map(sup =>
-                    `<div class="supervisor"><strong>${sup.name}</strong><br>${sup.role}</div>`
-                ).join('');
 
                 sessionActive = true;
                 currentRound = 0;
                 currentRoundSpan.textContent = '0';
 
+                // Show initial neutral impressions
+                const initialImpressions = {
+                    'Himanshu': {
+                        stance: 'unclear',
+                        confidence: 'low',
+                        concerns: ['No presentation yet']
+                    },
+                    'Ben': {
+                        stance: 'unclear',
+                        confidence: 'low',
+                        concerns: ['No presentation yet']
+                    },
+                    'Dave': {
+                        stance: 'unclear',
+                        confidence: 'low',
+                        concerns: ['No presentation yet']
+                    }
+                };
+                updateImpressions(initialImpressions);
+
                 sessionInfo.classList.remove('hidden');
-                conversation.classList.remove('hidden');
+                impressionDashboard.classList.remove('hidden');
                 startSection.classList.add('hidden');
                 inputSection.classList.remove('hidden');
 
-                messagesDiv.innerHTML = '';
             } catch (error) {
                 showError(error.message);
-                startBtn.innerHTML = 'Start Supervision Meeting';
+                startBtn.innerHTML = 'Begin Session';
                 startBtn.disabled = false;
             }
         }
 
-        async function submitInput(requestReflection) {
+        async function submitInput() {
             const input = researcherInput.value.trim();
             if (!input) {
                 showError('Please enter your response');
@@ -534,91 +561,76 @@
             }
 
             try {
+                // Disable input and show processing state
                 submitBtn.disabled = true;
-                reflectBtn.disabled = true;
-                submitBtn.innerHTML = '<span class="loading"></span> Processing...';
+                exportBtn.disabled = true;
+                endBtn.disabled = true;
+                researcherInput.disabled = true;
 
-                // Add researcher message to UI immediately
-                addMessage('Researcher', input, currentRound + 1, 'researcher');
+                // Clear input
                 researcherInput.value = '';
 
+                // Show processing hints with rotating messages
+                processingHint.classList.remove('hidden');
+                const hints = [
+                    'Agents are reading your presentation...',
+                    'Himanshu is considering your methodology...',
+                    'Ben is analyzing governance implications...',
+                    'Dave is sensing the experiential dimensions...',
+                    'Agents are discussing among themselves...',
+                    'Impressions are being updated...'
+                ];
+
+                let hintIndex = 0;
+                hintText.textContent = hints[0];
+                const hintInterval = setInterval(() => {
+                    hintIndex = (hintIndex + 1) % hints.length;
+                    hintText.textContent = hints[hintIndex];
+                }, 2000);
+
+                // Send to backend
                 const response = await fetch(`${API_BASE}/api/session/input`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         input: input,
-                        request_reflection: requestReflection
+                        request_reflection: false
                     })
                 });
 
                 if (!response.ok) throw new Error('Failed to process input');
 
                 const data = await response.json();
+
+                // Stop hint rotation
+                clearInterval(hintInterval);
+                processingHint.classList.add('hidden');
+
+                // Update round number
                 currentRound = data.round_number;
                 currentRoundSpan.textContent = currentRound;
 
-                // Add supervisor responses
-                data.supervisor_responses.forEach(resp => {
-                    addMessage(resp.name, resp.response, currentRound, 'supervisor');
-                });
-
-                // Update live impressions
+                // Update impression cards (no verbal responses shown)
                 if (data.current_impressions) {
                     updateImpressions(data.current_impressions);
                 }
 
-                // Add visibility reflection if present
-                if (data.visibility_reflection) {
-                    addVisibilityReflection(
-                        data.visibility_reflection.analysis,
-                        data.visibility_reflection.impression_summary,
-                        currentRound
-                    );
-                }
-
+                // Re-enable inputs
                 submitBtn.disabled = false;
-                reflectBtn.disabled = false;
-                submitBtn.innerHTML = 'Submit';
+                exportBtn.disabled = false;
+                endBtn.disabled = false;
+                researcherInput.disabled = false;
+                researcherInput.focus();
+
             } catch (error) {
                 showError(error.message);
                 submitBtn.disabled = false;
-                reflectBtn.disabled = false;
-                submitBtn.innerHTML = 'Submit';
+                exportBtn.disabled = false;
+                endBtn.disabled = false;
+                researcherInput.disabled = false;
             }
         }
 
-        function addMessage(speaker, content, round, type) {
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `message ${type}`;
-            msgDiv.innerHTML = `
-                <div class="message-header">
-                    ${speaker}
-                    <span class="round-badge">Round ${round}</span>
-                </div>
-                <div class="message-content">${content}</div>
-            `;
-            messagesDiv.appendChild(msgDiv);
-            conversation.scrollTop = conversation.scrollHeight;
-        }
-
-        function addVisibilityReflection(analysis, impressionSummary, round) {
-            const badges = Object.entries(impressionSummary).map(([name, stance]) =>
-                `<span class="impression-badge ${stance}">${name}: ${stance}</span>`
-            ).join('');
-
-            const msgDiv = document.createElement('div');
-            msgDiv.className = 'message visibility';
-            msgDiv.innerHTML = `
-                <div class="message-header">
-                    Visibility Analysis
-                    <span class="round-badge">Round ${round}</span>
-                </div>
-                <div class="message-content">${analysis}</div>
-                <div class="impression-summary">${badges}</div>
-            `;
-            messagesDiv.appendChild(msgDiv);
-            conversation.scrollTop = conversation.scrollHeight;
-        }
 
         async function exportSession() {
             try {
@@ -647,7 +659,6 @@
                 sessionActive = false;
                 sessionInfo.classList.add('hidden');
                 impressionDashboard.classList.add('hidden');
-                conversation.classList.add('hidden');
                 startSection.classList.remove('hidden');
                 inputSection.classList.add('hidden');
             } catch (error) {
